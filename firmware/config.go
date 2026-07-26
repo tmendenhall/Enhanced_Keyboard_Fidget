@@ -73,7 +73,7 @@ const (
 // flicker. This also sets the loop rate, and therefore the input sample rate.
 // 64 is the starting guess at 16MHz; if the LEDs flicker, halve it before
 // changing anything else.
-const pwmSteps = 64
+const pwmSteps = 32
 
 // ---------------------------------------------------------------------------
 // Debug
