@@ -22,7 +22,7 @@ Four switches, four LEDs, an ATmega328 Metro, and Go.
 | 4 — Breadboard | ✅ **Complete** — built, all four switches continuity-checked |
 | 5 — Firmware to spec | ✅ **Complete** — three modes, POST, reset gesture, flashed |
 | 5a — Reset confirmation sweep | ✅ **Built** — reverse L4→L1 sweep on reset |
-| 5b — Binary Counter bit order | 🔴 **Spec'd, not yet built** — flip to L4 = LSB, L1 = MSB |
+| 5b — Binary Counter bit order | ✅ **Built** — L4 = LSB, L1 = MSB |
 | 6 — Tuning | 🔵 **Current phase.** Dial in the timing constants by feel |
 | 7 — Stretch (Simon) | ⬜ Out of scope for v1 |
 
@@ -275,11 +275,7 @@ Build risks are retired. These are what's left, and they're all tuning-phase con
 
 ---
 
-## Next actions
-
-**Phase 5b — flip the Binary Counter bit order.** One line in `modes.go:updateBinary`: `1 << uint(numKeys-1-i)` in place of `1 << uint(i)`. Also update the comment above the function, which currently states the old order.
-
-### Then Phase 6, tuning
+## Next actions — Phase 6, tuning
 
 No deadline on any of these. The device works; this is making it feel right.
 

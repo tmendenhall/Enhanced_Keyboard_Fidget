@@ -175,7 +175,19 @@ func raveAtFull() bool {
 // ---------------------------------------------------------------------------
 //
 // Any completed click — press then release — increments a 4-bit counter.
-// L1 is the LSB, L4 the MSB. Wraps 15 -> 0.
+// Wraps 15 -> 0.
+//
+// Bit order: L4 is the LSB, L1 the MSB, so the row reads left to right exactly
+// as you'd write the number down (L1 L2 L3 L4 = bit3 bit2 bit1 bit0) and the
+// rightmost LED toggles fastest.
+//
+//	value 1 -> · · · ●        value 4 -> · ● · ·
+//	value 2 -> · · ● ·        value 8 -> ● · · ·
+//	value 3 -> · · ● ●        value 15 -> ● ● ● ●
+//
+// Note this is the opposite of the convenient indexing. `1 << i` would map
+// array slot 0 to bit 0 and produce a display that reads backwards; the index
+// is flipped at the point of display only, so the counter itself is untouched.
 
 var counter uint8
 
@@ -192,7 +204,8 @@ func updateBinary(now uint32) {
 	}
 
 	for i := 0; i < numKeys; i++ {
-		if counter&(1<<uint(i)) != 0 {
+		bit := uint(numKeys - 1 - i) // L1 -> bit3 ... L4 -> bit0
+		if counter&(1<<bit) != 0 {
 			level[i] = 255
 		} else {
 			level[i] = 0
