@@ -55,8 +55,8 @@ func handleReset(now uint32) bool {
 		return false
 	}
 
-	if current == stateRave && !raveAtFull() {
-		resetArmed = false // still ramping; this is normal play, not a gesture
+	if current == stateRave && !ravePeaked() {
+		resetArmed = false // still on the first climb; normal play, not a gesture
 		return false
 	}
 

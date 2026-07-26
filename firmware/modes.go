@@ -60,6 +60,8 @@ func enterMode(s state, now uint32) {
 	case stateRave:
 		for i := 0; i < numKeys; i++ {
 			raveLastStep[i] = now
+			raveFalling[i] = false
+			ravePeakedFlag[i] = false
 		}
 	case stateBinary:
 		counter = 0
@@ -135,35 +137,75 @@ func updateMole(now uint32) {
 // Mode 2 — Rave
 // ---------------------------------------------------------------------------
 //
-// Each LED ramps 0 -> 255 while its own switch is held, one step every
-// raveStepMS. Release drops it straight back to dark. Four independent
-// channels, no interaction between them.
+// While a switch is held its LED cycles continuously: 0 -> 255 -> 0, repeat,
+// one step every raveStepMS in whichever direction it is currently travelling.
+// 2.55s per leg, 5.1s per full cycle. Release drops the LED to dark and resets
+// the channel, so every press starts from 0 travelling up.
+//
+// Four independent channels — each with its own level, direction, and phase.
 
-var raveLastStep [numKeys]uint32
+var (
+	raveLastStep [numKeys]uint32
+	raveFalling  [numKeys]bool // false = climbing toward 255
+
+	// Latched the first time a channel reaches 255 since its switch went down,
+	// cleared on release. The reset gesture gates on this — see ravePeaked().
+	ravePeakedFlag [numKeys]bool
+)
 
 func updateRave(now uint32) {
 	for i := 0; i < numKeys; i++ {
 		if !keys[i].state {
 			level[i] = 0
+			raveFalling[i] = false
+			ravePeakedFlag[i] = false
 			raveLastStep[i] = now
 			continue
 		}
-		if level[i] < 255 && elapsed(now, raveLastStep[i], raveStepMS) {
+
+		if !elapsed(now, raveLastStep[i], raveStepMS) {
+			continue
+		}
+		// Advance by the period rather than snapping to now. Assigning now
+		// would round every step up to the next loop pass, stretching a
+		// nominal 2.55s leg by however long a pass takes.
+		raveLastStep[i] += raveStepMS
+
+		if raveFalling[i] {
+			if level[i] == 0 {
+				raveFalling[i] = false
+				level[i]++
+			} else {
+				level[i]--
+			}
+			continue
+		}
+
+		if level[i] == 255 {
+			ravePeakedFlag[i] = true
+			raveFalling[i] = true
+			level[i]--
+		} else {
 			level[i]++
-			// Advance by the period rather than snapping to now. Assigning
-			// now would round every step up to the next loop pass, stretching
-			// a nominal 2.55s ramp by however long a pass takes.
-			raveLastStep[i] += raveStepMS
+			if level[i] == 255 {
+				ravePeakedFlag[i] = true
+			}
 		}
 	}
 }
 
-// raveAtFull reports whether all four channels have finished ramping. The
-// reset gesture waits on this — holding all four switches IS normal Rave play,
-// so the hold clock cannot be allowed to start during the ramp.
-func raveAtFull() bool {
+// ravePeaked reports whether every channel has hit full brightness at least
+// once since its switch went down. The reset gesture waits on this, because
+// holding all four switches IS normal Rave play and the hold clock must not
+// start during the first climb.
+//
+// Deliberately a latch rather than a test for simultaneous full brightness.
+// The channels cycle independently, phased by when each switch was pressed, so
+// all four are essentially never at 255 on the same pass — testing for that
+// would make the reset impossible to trigger in this mode.
+func ravePeaked() bool {
 	for i := 0; i < numKeys; i++ {
-		if level[i] != 255 {
+		if !ravePeakedFlag[i] {
 			return false
 		}
 	}

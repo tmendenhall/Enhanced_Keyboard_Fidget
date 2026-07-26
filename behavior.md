@@ -37,7 +37,7 @@ Modes and the switch that triggers them.
 | # | Mode name | One-line description |
 |---|---|---|
 | 1 | Whack-A-Mole| A random Light L1-4 is On. When the corresponding switch is pressed down the light is Off then wait 50ms and repeat|
-| 2 | Rave Mode | For each SW the corresponding light is lit using PWA from 0 to 255 brightness.  |
+| 2 | Rave Mode | For each SW the corresponding light cycles continuously 0 → 255 → 0 using PWM for as long as the switch is held. Release turns it off. |
 | 3 | Binary Counter | Start with all L-4 off. If any swicth SW 1-4 is on then off then count in binary from 0 through 15 where L4 is the LSB and L1 is the MSB, so the row reads left-to-right like a written number. Cycle back to 0 once you reach 15. |
 
 ---
@@ -50,7 +50,9 @@ Holding all 4 SW1-SW4 down for the full hold duration goes back to the starting 
 
 Details:
 - Hold duration: 5000 ms
-- **Rave mode exception:** the 5000 ms hold clock does not start until all four LEDs have reached full brightness (255). Holding all four switches *is* normal Rave play, so the reset can't be allowed to fire during the ramp. End to end in Rave this is ~2.55 s of ramp + 5 s of hold. Releasing any switch aborts the gesture.
+- **Rave mode exception:** the 5000 ms hold clock does not start until every LED has reached full brightness (255) **at least once** since its switch went down. Holding all four switches *is* normal Rave play, so the reset can't be allowed to fire while the lights are still on their first climb. End to end in Rave this is ~2.55 s to the first peak + 5 s of hold ≈ 7.6 s. Releasing any switch aborts the gesture and clears the peaked flags.
+
+  *Note the "at least once" wording.* Now that Rave cycles continuously, the four lights are almost never at 255 simultaneously — their phases depend on exactly when each switch was pressed. Requiring all four at full at the same instant would make the reset nearly impossible to trigger. A latched "has peaked" flag per channel keeps the original intent — don't fire during the first climb — without demanding an alignment that won't happen.
 
 ### Reset confirmation sweep
 
@@ -90,7 +92,19 @@ A random Light L1-4 is On. When the corresponding switch is pressed down the lig
 
 For each SW(N) the corresponding light L(N) is lit using PWM from 0 to 255 brightness.
 
-The brightness level increases 1 every 10ms so long as the switch is on. When the switch is off the light is turned off. The lights L1-L4 are independent
+**While the switch is held, the light cycles continuously: 0 → 255 → 0, then repeats.** The brightness level changes by 1 every 10ms in whichever direction it is currently travelling, reversing at each end. When the switch is released the light turns off immediately and the cycle resets to 0, so the next press always starts from dark.
+
+The lights L1-L4 are independent — each has its own level and its own direction, and each starts its cycle from 0 when its switch goes down.
+
+Timing:
+
+| Leg | Duration |
+|---|---|
+| 0 → 255 (rising) | 2.55 s |
+| 255 → 0 (falling) | 2.55 s |
+| Full cycle | **5.1 s** |
+
+The triangle is symmetric — rise and fall share the same 10ms step. No pause at the top or bottom.
 
 ---
 

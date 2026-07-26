@@ -23,6 +23,7 @@ Four switches, four LEDs, an ATmega328 Metro, and Go.
 | 5 — Firmware to spec | ✅ **Complete** — three modes, POST, reset gesture, flashed |
 | 5a — Reset confirmation sweep | ✅ **Built** — reverse L4→L1 sweep on reset |
 | 5b — Binary Counter bit order | ✅ **Built** — L4 = LSB, L1 = MSB |
+| 5c — Rave continuous cycle | ✅ **Built** — 0→255→0 repeating; reset gate now a latched flag |
 | 6 — Tuning | 🔵 **Current phase.** Dial in the timing constants by feel |
 | 7 — Stretch (Simon) | ⬜ Out of scope for v1 |
 
@@ -56,7 +57,9 @@ This closes the one real usability hole in the gesture. Holding four switches fo
 
 Timing is `resetSweepStepMS`, defaulting to `postStepMS` (100 ms per LED, 400 ms total). Separate constant so the two sweeps can be tuned apart if the reset wants to feel snappier than the boot animation.
 
-**Rave mode exception: the 5-second timer starts only after all four LEDs reach full brightness.** This resolves the collision — holding all four *is* normal Rave play, so the hold clock can't start until the ramp is finished. Practical consequence: the full gesture in Rave takes **2.55 s of ramp + 5 s of hold, then a 0.4 s sweep ≈ 8 s**. Long, but unambiguous, it can't fire by accident, and it now ends with an unmistakable signal. Releasing any switch at any point aborts and resets the ramp.
+**Rave mode exception: the 5-second timer starts only after every LED has reached full brightness at least once.** Holding all four *is* normal Rave play, so the hold clock can't start while the lights are still on their first climb. Practical consequence: the full gesture in Rave takes **2.55 s to the first peak + 5 s of hold, then a 0.4 s sweep ≈ 8 s**. Long, but unambiguous, it can't fire by accident, and it now ends with an unmistakable signal. Releasing any switch at any point aborts and clears the peaked flags.
+
+**"At least once" is load-bearing.** Now that Rave cycles continuously rather than ramping once and holding, the four channels are almost never at 255 at the same instant — each one's phase depends on exactly when its switch went down, and nobody presses four switches on the same millisecond. Testing for simultaneous full brightness would make the reset effectively impossible to trigger in Rave. A latched per-channel flag preserves the original intent — don't fire during the first climb — without requiring an alignment that won't occur.
 
 **Whack-A-Mole runs indefinitely.** No score, no timer, no win condition. The 5-second reset hold is the only exit. Confirmed as intentional.
 
@@ -179,7 +182,11 @@ Worth spelling out, because it's non-obvious and it's the kind of thing that pro
 
 **1 — Whack-A-Mole.** Needs randomness. `math/rand` is far too heavy for AVR; a 16-bit xorshift or LFSR is ~10 lines and a couple bytes of state. Seeding is the interesting part — there's no entropy at power-on, so a fixed seed replays the identical mole sequence every boot. Fix: seed from elapsed milliseconds at the *first* user press. Genuinely unpredictable, costs nothing.
 
-**2 — Rave.** +1 brightness per 10 ms → 2.55 s dark to full. Existing software PWM handles it. Note that gamma correction makes the ramp *look* roughly linear rather than rushing to bright early — which is what you want perceptually, but it's a change if you were picturing raw linear PWM.
+**2 — Rave.** Each held switch drives its LED on a continuous triangle: 0 → 255 → 0, repeat, ±1 per 10 ms. **5.1 s per full cycle**, 2.55 s each leg. Release turns the LED off and resets that channel to 0, so every press starts from dark. Four independent channels, each with its own level *and* direction.
+
+Gamma correction makes the sweep *look* roughly linear rather than rushing to bright early — what you want perceptually, but a change if you were picturing raw linear PWM.
+
+Per-channel state grows by two bytes: a direction flag and a "has peaked" flag (see below). Still trivial against the RAM budget.
 
 **3 — Binary Counter.** Any switch click increments; wraps 15 → 0.
 
