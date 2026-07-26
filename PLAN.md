@@ -20,9 +20,11 @@ Four switches, four LEDs, an ATmega328 Metro, and Go.
 | 2 — Inventory | ✅ **Complete** |
 | 3 — Behavior spec | ✅ **Complete** — two minor gaps remain, defaults chosen |
 | 4 — Breadboard | ✅ **Complete** — built, all four switches continuity-checked |
-| 5 — Firmware to spec | ⬜ **Written, not yet compiled.** First `make flash` is the real test |
-| 6 — Tuning | ⬜ |
+| 5 — Firmware to spec | ✅ **Complete** — three modes, POST, reset gesture, flashed |
+| 6 — Tuning | 🔵 **Current phase.** Dial in the timing constants by feel |
 | 7 — Stretch (Simon) | ⬜ Out of scope for v1 |
+
+**v1 is built and running.** Everything from here is refinement.
 
 ## Files
 
@@ -33,10 +35,10 @@ Four switches, four LEDs, an ATmega328 Metro, and Go.
 | `SCHEMATIC.md` | Pin map, resistor math, breadboard layout, switch orientation test | Redrawn for 30 columns |
 | `TOOLCHAIN-MACOS.md` | Install + GoLand setup | Done, verified on hardware |
 | `fidget_blink/` | Blink sanity check | Working |
-| `firmware/config.go` | Pin map + every tunable timing constant | Written |
-| `firmware/hardware.go` | Timebase, debounce, software PWM, RNG | Written |
-| `firmware/modes.go` | The three modes + state transitions | Written |
-| `firmware/main.go` | POST, reset gesture, main loop | Written |
+| `firmware/config.go` | Pin map + every tunable timing constant | Flashed — **edit here to tune** |
+| `firmware/hardware.go` | Timebase, debounce, software PWM, RNG | Flashed |
+| `firmware/modes.go` | The three modes + state transitions | Flashed |
+| `firmware/main.go` | POST, reset gesture, main loop | Flashed |
 
 ---
 
@@ -161,7 +163,7 @@ The spec says feel matters and these numbers are estimates. Every one becomes a 
 | `raveStepMS` | 10 | Rave, per brightness increment |
 | `resetHoldMS` | **5000** | all-four-held reset |
 
-**Serial debug** is on per the spec — switch transitions and current mode. `println` isn't free on a 2KB chip, so it stays behind the `debug` constant. Turn it off once wiring is proven and reclaim the RAM.
+**Serial debug** is on per the spec — switch transitions and current mode, at 115200 baud. Split across two constants: `debug` for mode changes (rare, nearly free) and `debugKeys` for switch edges. Each `println` busy-waits the UART for about a millisecond, which stalls both the PWM refresh and input sampling — so turn `debugKeys` off before judging anything by feel, or you'll be tuning against the instrumentation.
 
 ---
 
@@ -181,7 +183,7 @@ Both minor. Defaults chosen; overrule at any point.
 
 **Software PWM, not hardware.** Timer0 drives TinyGo's millisecond clock on AVR — reconfiguring it for PWM breaks `time.Since()`, which debouncing and animation depend on. One code path for all four LEDs. Timer1 and Timer2 stay free if Rave ever needs CPU back.
 
-**Inputs sampled ~1 ms, animation at 125 Hz.** Deliberately decoupled — sampling at the animation rate would make a 5 ms debounce window meaningless. Press edges latch as sticky flags so nothing is dropped between the fast input loop and the slower render pass.
+**One loop pass = one PWM carrier cycle = one input sample.** The pass rate sets everything: brightness carrier frequency, input sampling, and how many samples the debounce window gets. Estimated at 1–2.5 ms but **not yet measured** — toggle spare pin `D8` once per pass and scope it if the debounce ever feels unreliable.
 
 **Gamma correction.** A linear fade appears to hold near full brightness for most of its travel, then snap off. Squaring approximates the eye's response for one multiply.
 
@@ -195,20 +197,40 @@ Both minor. Defaults chosen; overrule at any point.
 
 ## Risks
 
+Build risks are retired. These are what's left, and they're all tuning-phase concerns.
+
 | Risk | Impact | Mitigation |
 |---|---|---|
-| 2KB RAM ceiling | Three modes + RNG + serial debug exceeds the placeholder's footprint | `make size` after every change; `debug` off when not needed |
-| Mixed 4mm/6mm switch feel | Whack-A-Mole timing feels uneven between positions | Place matched pairs symmetrically (4mm at SW1/SW4, 6mm at SW2/SW3), or buy four matching |
-| Missing rail-to-rail ground link | Board looks finished, LEDs work, all four switches read permanently pressed | Step 3 of the bring-up checklist tests continuity from a *bottom* rail hole back to Metro GND |
-| Rave reset gesture is ~7.6 s end to end | May feel unresponsive or broken mid-hold | Consider a visual cue when the hold clock actually starts — flag for tuning |
-| TinyGo AVR backend maturity | Hard-to-attribute misbehavior | Blink already verified, so the toolchain is never the suspect |
+| Loop rate never measured | Debounce may get only 2–3 samples per window, not the dozens the 5 ms implies | Scope `D8` toggled once per pass; raise `debounceMS` or lower `pwmSteps` from what you see |
+| Rave reset gesture is ~7.6 s end to end | May feel unresponsive or broken mid-hold | Consider a visual cue when the hold clock actually starts |
+| Mixed 4mm/6mm switch feel | Whack-A-Mole timing feels uneven between positions | Matched pairs at symmetric positions (4mm at SW1/SW4, 6mm at SW2/SW3), or buy four matching |
+| `debugKeys` left on while tuning | Every edge stalls the loop ~1 ms — you'd be tuning against the instrumentation | Turn it off in `config.go` before judging feel |
+| 2KB RAM ceiling | Bites when features get added, not now | `make size` after every change; `make size-full` when something needs trimming |
 
 ---
 
-## Next actions
+## Completed
 
-1. ~~Redraw `SCHEMATIC.md` §4 for the 30-column board.~~ ✅
-2. ~~Sync `behavior.md` hold duration to 5000 ms.~~ ✅
-3. **Continuity-test all four switches** per `SCHEMATIC.md` §5 — before anything goes in the breadboard.
-4. **Build it**, working the bring-up checklist in `SCHEMATIC.md` §7 in order.
-5. Replace the placeholder firmware with the real state machine.
+1. ~~Install the toolchain and verify with a blink.~~ ✅
+2. ~~Fill in `parts.md`.~~ ✅
+3. ~~Fill in `behavior.md`.~~ ✅
+4. ~~Redraw `SCHEMATIC.md` §4 for the 30-column board.~~ ✅
+5. ~~Rebuild §5 around the switches' fixed orientation.~~ ✅
+6. ~~Sync `behavior.md` hold duration to 5000 ms.~~ ✅
+7. ~~Continuity-test all four switches.~~ ✅
+8. ~~Build the breadboard.~~ ✅
+9. ~~Replace the placeholder firmware with the real state machine.~~ ✅
+
+---
+
+## Next actions — Phase 6, tuning
+
+No deadline on any of these. The device works; this is making it feel right.
+
+1. **Turn off `debugKeys`** in `config.go` before judging anything by feel.
+2. **Play each mode and note what's wrong.** The likely suspects, in order: `moleRespawnMS` (50 ms — the biggest lever on how Whack-A-Mole feels), `raveStepMS` (10 ms → 2.55 s to full), then `debounceMS` if any press ever registers twice.
+3. **Decide on the Rave reset cue.** ~7.6 s with no feedback is a long time to hold four switches wondering whether it's working.
+4. **Confirm the two spec-gap defaults** now that you can feel them: wrong-switch presses ignored in Whack-A-Mole, SW4 silent in IDLE.
+5. **Record `make size`** so there's a baseline to compare against when features get added.
+
+Optional, whenever: measure the loop rate on `D8`; persist the last mode to EEPROM; swap in four matching switches; build the Simon mode from `behavior.md` §6.
