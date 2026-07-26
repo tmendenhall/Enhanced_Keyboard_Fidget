@@ -37,8 +37,16 @@ var ledPins = [numKeys]machine.Pin{
 
 const (
 	// POST: each LED lights this long, in sequence, at power-on.
-	// Four steps, so the whole sweep is 4 x this.
+	// Forwards, L1 -> L4. Four steps, so the whole sweep is 4 x this.
 	postStepMS = 100
+
+	// Reset confirmation: same sweep played backwards, L4 -> L1, the instant
+	// the reset hold completes. Direction is what distinguishes the two —
+	// forwards means booted, backwards means reset.
+	//
+	// Defaults to the POST timing so they match; change it here if the reset
+	// should feel snappier than the boot animation.
+	resetSweepStepMS = postStepMS
 
 	// Contact debounce window. Inputs are sampled once per loop pass, and a
 	// pass is one full software-PWM cycle plus a 64-bit divide in millis() —

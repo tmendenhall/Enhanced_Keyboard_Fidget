@@ -21,6 +21,8 @@ Four switches, four LEDs, an ATmega328 Metro, and Go.
 | 3 — Behavior spec | ✅ **Complete** — two minor gaps remain, defaults chosen |
 | 4 — Breadboard | ✅ **Complete** — built, all four switches continuity-checked |
 | 5 — Firmware to spec | ✅ **Complete** — three modes, POST, reset gesture, flashed |
+| 5a — Reset confirmation sweep | ✅ **Built** — reverse L4→L1 sweep on reset |
+| 5b — Binary Counter bit order | 🔴 **Spec'd, not yet built** — flip to L4 = LSB, L1 = MSB |
 | 6 — Tuning | 🔵 **Current phase.** Dial in the timing constants by feel |
 | 7 — Stretch (Simon) | ⬜ Out of scope for v1 |
 
@@ -48,7 +50,13 @@ Four switches, four LEDs, an ATmega328 Metro, and Go.
 
 **Reset gesture: all four switches held 5000 ms.** Up from 2000 ms. Returns the device to IDLE, where the next single press selects a mode.
 
-**Rave mode exception: the 5-second timer starts only after all four LEDs reach full brightness.** This resolves the collision — holding all four *is* normal Rave play, so the hold clock can't start until the ramp is finished. Practical consequence: the full gesture in Rave takes **2.55 s of ramp + 5 s of hold ≈ 7.6 s**. Long, but unambiguous, and it can't fire by accident. Releasing any switch at any point aborts and resets the ramp.
+**The reset is confirmed by a reverse LED sweep — L4, L3, L2, L1.** The moment the hold duration is satisfied, the device plays the power-on sweep backwards, then lands in IDLE. Same shape as POST, opposite direction, so the two are never confused: forwards means "I just powered up," backwards means "I just reset."
+
+This closes the one real usability hole in the gesture. Holding four switches for five seconds with nothing happening gives you no way to tell whether the device registered the gesture, whether you started counting at the right moment, or whether it's simply broken — and in Rave the wait is closer to 7.6 s. The sweep answers all three: it means *done, let go*.
+
+Timing is `resetSweepStepMS`, defaulting to `postStepMS` (100 ms per LED, 400 ms total). Separate constant so the two sweeps can be tuned apart if the reset wants to feel snappier than the boot animation.
+
+**Rave mode exception: the 5-second timer starts only after all four LEDs reach full brightness.** This resolves the collision — holding all four *is* normal Rave play, so the hold clock can't start until the ramp is finished. Practical consequence: the full gesture in Rave takes **2.55 s of ramp + 5 s of hold, then a 0.4 s sweep ≈ 8 s**. Long, but unambiguous, it can't fire by accident, and it now ends with an unmistakable signal. Releasing any switch at any point aborts and resets the ramp.
 
 **Whack-A-Mole runs indefinitely.** No score, no timer, no win condition. The 5-second reset hold is the only exit. Confirmed as intentional.
 
@@ -114,22 +122,50 @@ Switch grounds therefore go to the **top** `−` rail (adjacent to row A), which
 
 ## Phase 5 — Firmware to spec
 
-`firmware/main.go` currently holds placeholder modes that predate the spec. The scaffolding survives — debouncing, sticky edge latching, software PWM, gamma correction, the millisecond timebase — but the mode layer is replaced.
+Four files. `config.go` is the tuning surface; nothing else hard-codes a duration.
 
 ### State machine
 
 ```
-POST — 400ms LED sweep, 100ms each
-  ↓
+POWER ON
+  │
+  ▼
+POST — forward sweep, L1 → L2 → L3 → L4, 100ms each
+  │
+  ▼
 IDLE — all LEDs off, awaiting mode selection
   │
   ├── SW1 → MODE 1  Whack-A-Mole
   ├── SW2 → MODE 2  Rave
   └── SW3 → MODE 3  Binary Counter
         │
-        └── all four held 5000ms → IDLE
-            (Rave: clock starts only once all four LEDs are at 255)
+        │   all four switches held 5000ms
+        │   (Rave: clock starts only once all four LEDs reach 255)
+        ▼
+      RESET SWEEP — reverse, L4 → L3 → L2 → L1, 100ms each
+        │
+        ▼
+      IDLE   ← next single press selects a mode,
+               but only after all four switches come up
 ```
+
+Direction is the whole point of the reverse sweep: **forwards means booted, backwards means reset.** Two events that leave the device in the same state, told apart by animation direction alone.
+
+### Reset confirmation sweep
+
+Fires the instant the hold duration is satisfied — while the switches are still down — then the device settles into IDLE.
+
+| Property | Value |
+|---|---|
+| Order | L4, L3, L2, L1 |
+| Per-LED duration | `resetSweepStepMS`, default `postStepMS` = 100 ms |
+| Total | 400 ms |
+| One LED at a time? | Yes — on, hold, off, next. Identical shape to POST. |
+| Blocking? | Yes, same as POST |
+
+Blocking is fine here and keeps it simple. Nothing else needs to run during those 400 ms: the modes are already torn down, and IDLE is about to ignore input anyway until all four switches come up. Input sampling pauses for the duration, but the debouncer catches up within a few milliseconds once the loop resumes, so a release during the sweep is registered normally.
+
+Implementation is one shared helper rather than two near-identical loops — POST calls it ascending, reset calls it descending.
 
 ### Why the reset gesture doesn't fight the modes
 
@@ -145,7 +181,21 @@ Worth spelling out, because it's non-obvious and it's the kind of thing that pro
 
 **2 — Rave.** +1 brightness per 10 ms → 2.55 s dark to full. Existing software PWM handles it. Note that gamma correction makes the ramp *look* roughly linear rather than rushing to bright early — which is what you want perceptually, but it's a change if you were picturing raw linear PWM.
 
-**3 — Binary Counter.** Any switch click increments. L1 = LSB, L4 = MSB, wraps 15 → 0.
+**3 — Binary Counter.** Any switch click increments; wraps 15 → 0.
+
+**Bit order: L4 is the LSB, L1 the MSB.** The row reads left to right exactly as you'd write the number down — `L1 L2 L3 L4` = `bit3 bit2 bit1 bit0`. Counting up, the rightmost LED toggles fastest, which is what anyone who has read a binary number expects. The reverse (L1 = LSB) is the more natural thing to *write* in code, since array index 0 maps to bit 0, and that's exactly why it's worth being deliberate here: the convenient indexing produces a display that reads backwards.
+
+| Value | L1 | L2 | L3 | L4 |
+|---|---|---|---|---|
+| 0 | · | · | · | · |
+| 1 | · | · | · | ● |
+| 2 | · | · | ● | · |
+| 3 | · | · | ● | ● |
+| 4 | · | ● | · | · |
+| 8 | ● | · | · | · |
+| 15 | ● | ● | ● | ● |
+
+In code this is one index flip — `counter & (1 << (numKeys-1-i))` rather than `1 << i`. No other mode is affected; nothing else in the firmware assigns meaning to LED order.
 
 ### Persistence — not implementing, here's what it would cost
 
@@ -157,7 +207,8 @@ The spec says feel matters and these numbers are estimates. Every one becomes a 
 
 | Constant | Value | Meaning |
 |---|---|---|
-| `postStepMS` | 100 | POST sweep, per LED |
+| `postStepMS` | 100 | POST sweep, per LED — forwards, L1→L4 |
+| `resetSweepStepMS` | `postStepMS` | Reset sweep, per LED — backwards, L4→L1 |
 | `debounceMS` | 5 | contact debounce window |
 | `moleRespawnMS` | 50 | Whack-A-Mole, delay before next mole |
 | `raveStepMS` | 10 | Rave, per brightness increment |
@@ -202,7 +253,8 @@ Build risks are retired. These are what's left, and they're all tuning-phase con
 | Risk | Impact | Mitigation |
 |---|---|---|
 | Loop rate never measured | Debounce may get only 2–3 samples per window, not the dozens the 5 ms implies | Scope `D8` toggled once per pass; raise `debounceMS` or lower `pwmSteps` from what you see |
-| Rave reset gesture is ~7.6 s end to end | May feel unresponsive or broken mid-hold | Consider a visual cue when the hold clock actually starts |
+| ~~Reset gesture gives no feedback~~ | ~~Feels unresponsive or broken mid-hold~~ | **Resolved** by the reverse sweep — see Phase 5a |
+| Rave reset is still ~8 s end to end | Even with the end-of-gesture sweep, there's no signal that the *clock has started* | Optional: a brief dip or pulse the instant all four hit full. Judge by feel first — the completion sweep may be enough |
 | Mixed 4mm/6mm switch feel | Whack-A-Mole timing feels uneven between positions | Matched pairs at symmetric positions (4mm at SW1/SW4, 6mm at SW2/SW3), or buy four matching |
 | `debugKeys` left on while tuning | Every edge stalls the loop ~1 ms — you'd be tuning against the instrumentation | Turn it off in `config.go` before judging feel |
 | 2KB RAM ceiling | Bites when features get added, not now | `make size` after every change; `make size-full` when something needs trimming |
@@ -223,13 +275,17 @@ Build risks are retired. These are what's left, and they're all tuning-phase con
 
 ---
 
-## Next actions — Phase 6, tuning
+## Next actions
+
+**Phase 5b — flip the Binary Counter bit order.** One line in `modes.go:updateBinary`: `1 << uint(numKeys-1-i)` in place of `1 << uint(i)`. Also update the comment above the function, which currently states the old order.
+
+### Then Phase 6, tuning
 
 No deadline on any of these. The device works; this is making it feel right.
 
 1. **Turn off `debugKeys`** in `config.go` before judging anything by feel.
 2. **Play each mode and note what's wrong.** The likely suspects, in order: `moleRespawnMS` (50 ms — the biggest lever on how Whack-A-Mole feels), `raveStepMS` (10 ms → 2.55 s to full), then `debounceMS` if any press ever registers twice.
-3. **Decide on the Rave reset cue.** ~7.6 s with no feedback is a long time to hold four switches wondering whether it's working.
+3. **Judge whether the reset needs a *start*-of-hold cue too.** The reverse sweep confirms completion; it doesn't tell you the clock has begun. In Rave especially, that's several seconds of holding on faith. Try it before adding anything.
 4. **Confirm the two spec-gap defaults** now that you can feel them: wrong-switch presses ignored in Whack-A-Mole, SW4 silent in IDLE.
 5. **Record `make size`** so there's a baseline to compare against when features get added.
 

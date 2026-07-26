@@ -38,7 +38,7 @@ Modes and the switch that triggers them.
 |---|---|---|
 | 1 | Whack-A-Mole| A random Light L1-4 is On. When the corresponding switch is pressed down the light is Off then wait 50ms and repeat|
 | 2 | Rave Mode | For each SW the corresponding light is lit using PWA from 0 to 255 brightness.  |
-| 3 | Binary Counter | Start with all L-4 off. If any swicth SW 1-4 is on then off then count in binary from 0 through 15 where L1 is the LSB and L4 is the MSB. Cycle back to 0 once you reach 15. |
+| 3 | Binary Counter | Start with all L-4 off. If any swicth SW 1-4 is on then off then count in binary from 0 through 15 where L4 is the LSB and L1 is the MSB, so the row reads left-to-right like a written number. Cycle back to 0 once you reach 15. |
 
 ---
 
@@ -51,6 +51,23 @@ Holding all 4 SW1-SW4 down for the full hold duration goes back to the starting 
 Details:
 - Hold duration: 5000 ms
 - **Rave mode exception:** the 5000 ms hold clock does not start until all four LEDs have reached full brightness (255). Holding all four switches *is* normal Rave play, so the reset can't be allowed to fire during the ramp. End to end in Rave this is ~2.55 s of ramp + 5 s of hold. Releasing any switch aborts the gesture.
+
+### Reset confirmation sweep
+
+The moment the hold duration is satisfied, before returning to the starting state, cycle the LEDs **in reverse** — the opposite direction of the power-on test:
+
+| Step | Duration | LED behavior |
+|---|---|---|
+| 1 | 100ms | L4 on, then L4 off |
+| 2 | 100ms | L3 on, then L3 off |
+| 3 | 100ms | L2 on, then L2 off |
+| 4 | 100ms | L1 on, then L1 off |
+
+Then all LEDs off, no mode active, waiting for all four switches to be released before the next press selects a mode.
+
+- Timing is configurable and defaults to the same value as the power-on sweep (100 ms per LED, 400 ms total).
+- The sweep plays while the switches are still held. It means *done, let go*.
+- **Direction carries the meaning.** Forwards (L1→L4) = just powered on. Backwards (L4→L1) = just reset. Two events that leave the device in the same state, distinguished by animation direction alone.
 
 
 ---
@@ -79,14 +96,22 @@ The brightness level increases 1 every 10ms so long as the switch is on. When th
 
 ### Mode 3 — Binary Counter
 
-Start with all Lights L1-4 off. If any swicth SW 1-4 is clicked on then off then increment and display in binary from 0 through 15 where L1 is the LSB and L4 is the MSB. Cycle back to 0 once you reach 15.
-Examples 1-3
+Start with all Lights L1-4 off. If any swicth SW 1-4 is clicked on then off then increment and display in binary from 0 through 15 where **L4 is the LSB and L1 is the MSB**. Cycle back to 0 once you reach 15.
+
+The LEDs read left to right exactly as you'd write the number down: L1 L2 L3 L4 = bit3 bit2 bit1 bit0. Counting up, the rightmost light toggles fastest.
+
+Examples
 
 |L1|L2|L3|L4|value|
 |---|---|---|---|---|
-|1|0|0|0|1|
-|0|1|0|0|2|
-|1|1|0|0|3|
+|0|0|0|0|0|
+|0|0|0|1|1|
+|0|0|1|0|2|
+|0|0|1|1|3|
+|0|1|0|0|4|
+|1|0|0|0|8|
+|1|1|1|1|15|
+
 ---
 
 ### Mode 4 — <name>
@@ -126,6 +151,8 @@ Free-form — this is the part that's hardest to infer from a spec and most usef
 Yes it will feel wrong if the responses are too fast or too slow. The timing values are estimates and may be changed. Structure the code so that the values are easy to change to dial in the feeling.
 
 At any point if all 4 switches are held down for 5 seconds (5000ms) then reset the state to right after power on when the next switch selects the mode. In Rave mode the 5000ms only begins counting once all four lights have reached full brightness.
+
+When the hold completes, the LEDs sweep in reverse — L4, L3, L2, L1 — so it is obvious the reset registered and you can let go. See §2.
 
 ---
 
