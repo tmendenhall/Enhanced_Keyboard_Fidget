@@ -82,8 +82,9 @@ const (
 	simonPlaybackGapMS = 200
 
 	// Simon: pause after a fully-correct repeat, before the pattern grows
-	// by one step. Value from behavior.md §6.
-	simonSuccessGapMS = 100
+	// by one step. behavior.md §6 originally specified 100ms; raised after
+	// play-testing felt too abrupt.
+	simonSuccessGapMS = 500
 
 	// Simon: fail feedback — all four LEDs blink together this many ms on,
 	// this many ms off, repeated simonFailBlinkCount times. Values from

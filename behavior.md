@@ -147,7 +147,7 @@ Examples
 |---|---|
 | Playback: LED on | 400ms (estimate, `simonPlaybackOnMS`) |
 | Playback: gap between steps | 200ms (estimate, `simonPlaybackGapMS`) |
-| Pause after a correct full repeat, before growing | 100ms (`simonSuccessGapMS`) |
+| Pause after a correct full repeat, before growing | 500ms (`simonSuccessGapMS`) — raised from the original 100ms spec after play-testing |
 | Fail blink, on/off | 50ms / 50ms, ×3 cycles (`simonFailBlinkMS`, `simonFailBlinkCount`) |
 | Win sweep, per LED | defaults to the POST/reset timing (`simonWinSweepStepMS`) |
 

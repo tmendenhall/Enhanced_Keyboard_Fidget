@@ -38,10 +38,10 @@ Four switches, four LEDs, an ATmega328 Metro, and Go.
 | `SCHEMATIC.md` | Pin map, resistor math, breadboard layout, switch orientation test | Redrawn for 30 columns |
 | `TOOLCHAIN-MACOS.md` | Install + GoLand setup | Done, verified on hardware |
 | `fidget_blink/` | Blink sanity check | Working |
-| `firmware/config.go` | Pin map + every tunable timing constant | Updated for Simon 2026-07-27 — **not yet flashed** |
+| `firmware/config.go` | Pin map + every tunable timing constant | Flashed 2026-07-27 (Simon + `simonSuccessGapMS` raised to 500ms) |
 | `firmware/hardware.go` | Timebase, debounce, software PWM, RNG | Flashed, unchanged by Simon |
-| `firmware/modes.go` | The four modes + state transitions | Updated for Simon 2026-07-27 — **not yet flashed** |
-| `firmware/main.go` | POST, reset gesture, main loop | Updated for Simon 2026-07-27 — **not yet flashed** |
+| `firmware/modes.go` | The four modes + state transitions | Flashed 2026-07-27 (Simon) |
+| `firmware/main.go` | POST, reset gesture, main loop | Flashed 2026-07-27 (Simon) |
 
 ---
 
