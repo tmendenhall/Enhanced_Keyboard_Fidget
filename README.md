@@ -1,6 +1,6 @@
 # Enhanced Keyboard Fidget
 
-A four-switch, four-LED desk fidget running Go on an ATmega328. Press a switch, get a light. Three interaction modes, selected at power-on, plus a deliberate reset gesture to get back between them.
+A four-switch, four-LED desk fidget running Go on an ATmega328. Press a switch, get a light. Four interaction modes, selected at power-on, plus a deliberate reset gesture to get back between them.
 
 Built on a breadboard with tactile buttons standing in for MX keyboard switches — an MX switch is a plain SPST momentary contact, so the prototype transfers to real switches one-for-one.
 
@@ -21,7 +21,8 @@ IDLE — all LEDs dark, waiting
   │
   ├── SW1 → Whack-A-Mole
   ├── SW2 → Rave
-  └── SW3 → Binary Counter
+  ├── SW3 → Binary Counter
+  └── SW4 → Simon
         │
         │  all four switches held 5000ms
         ▼
@@ -30,6 +31,8 @@ IDLE — all LEDs dark, waiting
         ▼
       IDLE
 ```
+
+(Simon has a second way back to IDLE — see below.)
 
 Direction carries the meaning. Power-on and reset leave the device in the same state, so the sweep runs **forwards for boot** and **backwards for reset** — that's the only thing distinguishing them, and it needs no explanation to read.
 
@@ -49,16 +52,21 @@ Direction carries the meaning. Power-on and reset leave the device in the same s
 | 8 | ● | · | · | · |
 | 15 | ● | ● | ● | ● |
 
+**4 — Simon.** A random pattern of LEDs plays back one at a time, then you reproduce it on the matching switches, in order. A fully correct repeat pauses briefly and grows the pattern by one, up to 15 steps. Press the wrong switch at any point and all four LEDs blink together, then the game restarts at length 1. Reach and repeat a 15-step pattern and the device plays a win sweep — two round trips, L1→L4→L1→L4→L1 — and returns straight to IDLE, no reset hold required.
+
+State machine and per-transition variable writes for all four modes are diagrammed in [`docs/STATE-DIAGRAMS.md`](docs/STATE-DIAGRAMS.md).
+
 ### The reset gesture
 
 Hold all four switches for five seconds, anywhere, and the device returns to IDLE. The reverse sweep confirms it: *done, let go.*
 
 Rave gets an exception. Holding all four switches **is** normal Rave play, so the hold clock doesn't start until every channel has reached full brightness at least once. Note "at least once" rather than "simultaneously" — the channels cycle independently, so all four are essentially never at 255 on the same pass, and testing for that alignment would make the reset impossible to trigger. A latched per-channel flag preserves the intent (don't fire during the first climb) without requiring an alignment that won't happen.
 
-The gesture doesn't collide with the other two modes, for reasons worth knowing:
+The gesture doesn't collide with the other modes, for reasons worth knowing:
 
 - **Whack-A-Mole** clears on the press *edge*. Holding produces one edge, then nothing — the next mole spawns and simply stays lit.
 - **Binary Counter** counts *releases*. Holding produces none, so the count freezes.
+- **Simon** needs no exception either — holding all four isn't something normal play ever does, so if it happens the gesture just runs its course like it would in any other mode.
 
 ---
 
@@ -138,10 +146,12 @@ make clean
 ├── firmware/            the fidget
 │   ├── config.go        pin map + every timing constant — edit here to tune
 │   ├── hardware.go      timebase, debounce, software PWM, RNG
-│   ├── modes.go         the three modes + state transitions
+│   ├── modes.go         the four modes + state transitions
 │   ├── main.go          POST, sweeps, reset gesture, main loop
 │   └── Makefile
 ├── fidget_blink/        minimal blink, for proving the toolchain
+├── docs/
+│   └── STATE-DIAGRAMS.md  mode state machines + per-loop variable writes
 ├── PLAN.md              phases, design decisions, risks
 ├── behavior.md          behavior spec — the source of truth for firmware
 ├── SCHEMATIC.md         wiring, resistor math, bring-up checklist
@@ -163,7 +173,14 @@ Every duration lives in `config.go`. Nothing else hard-codes one.
 | `moleRespawnMS` | 50 | Whack-A-Mole pause between moles — the biggest lever on how the game feels |
 | `raveStepMS` | 10 | Rave, per brightness step (10 ms → 2.55 s per leg) |
 | `resetHoldMS` | 5000 | Reset gesture hold |
-| `pwmSteps` | 64 | Brightness resolution, 1..256 |
+| `pwmSteps` | 32 | Brightness resolution, 1..256 |
+| `simonMaxLength` | 15 | Simon, longest pattern before the win sweep (not a duration — a count) |
+| `simonPlaybackOnMS` | 400 | Simon, how long each LED stays lit during playback |
+| `simonPlaybackGapMS` | 200 | Simon, dark gap between playback steps |
+| `simonSuccessGapMS` | 500 | Simon, pause after a correct full repeat, before the pattern grows — raised from the original 100ms spec after play-testing |
+| `simonFailBlinkMS` | 50 | Simon, fail-blink on/off duration |
+| `simonFailBlinkCount` | 3 | Simon, fail-blink cycle count |
+| `simonWinSweepStepMS` | `postStepMS` | Simon, per-LED duration of the win sweep |
 
 Two debug flags, also in `config.go`. `debug` logs mode changes and is nearly free. `debugKeys` logs every switch edge — **turn it off before judging anything by feel**, because each `println` busy-waits the UART for about a millisecond, and during that stall the PWM refresh and input sampling both stop. Tuning with it on means tuning against the instrumentation.
 
@@ -185,4 +202,3 @@ Two debug flags, also in `config.go`. `debug` logs mode changes and is nearly fr
 
 - **Persistence.** Mode is not remembered across power cycles, by choice. The '328 has 1KB of EEPROM if that changes — see `PLAN.md` for what it would cost.
 - **USB HID.** Not a keyboard, not planned.
-- **Simon mode.** Spec'd in `behavior.md` §6, explicitly out of scope for v1.
