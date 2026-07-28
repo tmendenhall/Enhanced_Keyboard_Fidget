@@ -229,9 +229,9 @@ The spec says feel matters and these numbers are estimates. Every one becomes a 
 
 Both minor. Defaults chosen; overrule at any point.
 
-**Wrong switch pressed in Whack-A-Mole.** Unspecified. **Default: ignore it.** No penalty, no flash. Friendlier, and a penalty mechanic implies scoring, which you've explicitly declined.
+**Wrong switch pressed in Whack-A-Mole.** Unspecified. **Default: ignore it.** No penalty, no flash. Friendlier, and a penalty mechanic implies scoring, which you've explicitly declined. ✅ **Confirmed 2026-07-27** by play-testing — feels right, keeping as final.
 
-**SW4 pressed in IDLE.** SW1–SW3 select modes; SW4 has no mode. **Default: silent no-op.** The alternative is a brief flash meaning "not a mode," which is friendlier but adds a state. Easy to add later if the silence feels broken.
+**SW4 pressed in IDLE.** SW1–SW3 select modes; SW4 has no mode. **Default: silent no-op.** The alternative is a brief flash meaning "not a mode," which is friendlier but adds a state. Easy to add later if the silence feels broken. 🔵 **Still open — 2026-07-27:** intended to be resolved soon, not finalized. Likely candidate: the brief-flash alternative above.
 
 ---
 
@@ -263,7 +263,7 @@ Build risks are retired. These are what's left, and they're all tuning-phase con
 | ~~Reset gesture gives no feedback~~ | ~~Feels unresponsive or broken mid-hold~~ | **Resolved** by the reverse sweep — see Phase 5a |
 | Rave reset is still ~8 s end to end | Even with the end-of-gesture sweep, there's no signal that the *clock has started* | Optional: a brief dip or pulse the instant all four hit full. Judge by feel first — the completion sweep may be enough |
 | Mixed 4mm/6mm switch feel | Whack-A-Mole timing feels uneven between positions | Matched pairs at symmetric positions (4mm at SW1/SW4, 6mm at SW2/SW3), or buy four matching |
-| `debugKeys` left on while tuning | Every edge stalls the loop ~1 ms — you'd be tuning against the instrumentation | Turn it off in `config.go` before judging feel |
+| `debugKeys` left on while tuning | Every edge stalls the loop ~1 ms — you'd be tuning against the instrumentation | Turn it off in `config.go` before judging feel — **2026-07-27: tested with debug on, tuning felt fine, risk didn't materialize in practice** |
 | 2KB RAM ceiling | Bites when features get added, not now | `make size` after every change; `make size-full` when something needs trimming |
 
 ---
@@ -286,10 +286,10 @@ Build risks are retired. These are what's left, and they're all tuning-phase con
 
 No deadline on any of these. The device works; this is making it feel right.
 
-1. **Turn off `debugKeys`** in `config.go` before judging anything by feel.
+1. ~~**Turn off `debugKeys`** in `config.go` before judging anything by feel.~~ ✅ **2026-07-27:** tested with debug on — tuning felt fine either way, not a real issue in practice.
 2. **Play each mode and note what's wrong.** The likely suspects, in order: `moleRespawnMS` (50 ms — the biggest lever on how Whack-A-Mole feels), `raveStepMS` (10 ms → 2.55 s to full), then `debounceMS` if any press ever registers twice.
 3. **Judge whether the reset needs a *start*-of-hold cue too.** The reverse sweep confirms completion; it doesn't tell you the clock has begun. In Rave especially, that's several seconds of holding on faith. Try it before adding anything.
-4. **Confirm the two spec-gap defaults** now that you can feel them: wrong-switch presses ignored in Whack-A-Mole, SW4 silent in IDLE.
-5. **Record `make size`** so there's a baseline to compare against when features get added.
+4. **Confirm the two spec-gap defaults** now that you can feel them: wrong-switch presses ignored in Whack-A-Mole ✅ confirmed 2026-07-27, SW4 silent in IDLE 🔵 still open, to be resolved soon.
+5. ~~**Record `make size`** so there's a baseline to compare against when features get added.~~ ✅ **2026-07-27:** flash 12,687 / 32,768 (38.7%), ram 766 / 2,048 (37.4%).
 
 Optional, whenever: measure the loop rate on `D8`; persist the last mode to EEPROM; swap in four matching switches; build the Simon mode from `behavior.md` §6.
