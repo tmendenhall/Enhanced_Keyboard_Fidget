@@ -25,7 +25,7 @@ Four switches, four LEDs, an ATmega328 Metro, and Go.
 | 5b — Binary Counter bit order | ✅ **Built** — L4 = LSB, L1 = MSB |
 | 5c — Rave continuous cycle | ✅ **Built** — 0→255→0 repeating; reset gate now a latched flag |
 | 6 — Tuning | 🔵 **Current phase.** Dial in the timing constants by feel |
-| 7 — Stretch (Simon) | ⬜ Out of scope for v1 |
+| 7 — Simon | ✅ **Built** — 2026-07-27, fourth mode, triggered by SW4 from IDLE — see behavior.md §3 Mode 4 |
 
 **v1 is built and running.** Everything from here is refinement.
 
@@ -38,10 +38,10 @@ Four switches, four LEDs, an ATmega328 Metro, and Go.
 | `SCHEMATIC.md` | Pin map, resistor math, breadboard layout, switch orientation test | Redrawn for 30 columns |
 | `TOOLCHAIN-MACOS.md` | Install + GoLand setup | Done, verified on hardware |
 | `fidget_blink/` | Blink sanity check | Working |
-| `firmware/config.go` | Pin map + every tunable timing constant | Flashed — **edit here to tune** |
-| `firmware/hardware.go` | Timebase, debounce, software PWM, RNG | Flashed |
-| `firmware/modes.go` | The three modes + state transitions | Flashed |
-| `firmware/main.go` | POST, reset gesture, main loop | Flashed |
+| `firmware/config.go` | Pin map + every tunable timing constant | Updated for Simon 2026-07-27 — **not yet flashed** |
+| `firmware/hardware.go` | Timebase, debounce, software PWM, RNG | Flashed, unchanged by Simon |
+| `firmware/modes.go` | The four modes + state transitions | Updated for Simon 2026-07-27 — **not yet flashed** |
+| `firmware/main.go` | POST, reset gesture, main loop | Updated for Simon 2026-07-27 — **not yet flashed** |
 
 ---
 
@@ -287,7 +287,7 @@ Build risks are retired. These are what's left, and they're all tuning-phase con
 No deadline on any of these. The device works; this is making it feel right.
 
 1. ~~**Turn off `debugKeys`** in `config.go` before judging anything by feel.~~ ✅ **2026-07-27:** tested with debug on — tuning felt fine either way, not a real issue in practice.
-2. **Play each mode and note what's wrong.** The likely suspects, in order: `moleRespawnMS` (50 ms — the biggest lever on how Whack-A-Mole feels), `raveStepMS` (10 ms → 2.55 s to full), then `debounceMS` if any press ever registers twice.
+2. **Play each mode and note what's wrong.** The likely suspects, in order: `moleRespawnMS` (50 ms — the biggest lever on how Whack-A-Mole feels), `raveStepMS` (10 ms → 2.55 s to full), then `debounceMS` if any press ever registers twice. Simon is new and unflashed — flash it and feel out `simonPlaybackOnMS`/`simonPlaybackGapMS` (both estimates, no play-testing yet) before trusting them.
 3. **Judge whether the reset needs a *start*-of-hold cue too.** The reverse sweep confirms completion; it doesn't tell you the clock has begun. In Rave especially, that's several seconds of holding on faith. Try it before adding anything.
 4. **Confirm the two spec-gap defaults** now that you can feel them: wrong-switch presses ignored in Whack-A-Mole ✅ confirmed 2026-07-27, SW4 silent in IDLE 🔵 still open, to be resolved soon.
 5. ~~**Record `make size`** so there's a baseline to compare against when features get added.~~ ✅ **2026-07-27:** flash 12,687 / 32,768 (38.7%), ram 766 / 2,048 (37.4%).

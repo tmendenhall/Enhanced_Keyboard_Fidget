@@ -14,6 +14,10 @@ import "machine"
 
 const numKeys = 4
 
+// Simon: longest pattern the game grows to before the win sweep. See
+// behavior.md §6.
+const simonMaxLength = 15
+
 // Switches: GPIO -> switch -> GND, internal pull-up enabled.
 // Active low: the pin reads LOW when the switch is closed.
 var switchPins = [numKeys]machine.Pin{
@@ -69,6 +73,28 @@ const (
 	// Hold all four switches this long to return to IDLE.
 	// In Rave the clock does not start until all four LEDs hit full.
 	resetHoldMS = 5000
+
+	// Simon: how long each LED stays lit during pattern playback, and how
+	// long it stays dark between steps. The gap must be nonzero or two
+	// repeated steps in a row (allowed — same as Whack-A-Mole) would look
+	// like one continuous light instead of two flashes.
+	simonPlaybackOnMS  = 400
+	simonPlaybackGapMS = 200
+
+	// Simon: pause after a fully-correct repeat, before the pattern grows
+	// by one step. Value from behavior.md §6.
+	simonSuccessGapMS = 100
+
+	// Simon: fail feedback — all four LEDs blink together this many ms on,
+	// this many ms off, repeated simonFailBlinkCount times. Values from
+	// behavior.md §6, now named constants instead of literals.
+	simonFailBlinkMS    = 50
+	simonFailBlinkCount = 3
+
+	// Simon: per-LED duration for the win sweep (pattern reached
+	// simonMaxLength and was repeated correctly). Defaults to the POST/reset
+	// timing; separate constant so it can be tuned apart from those.
+	simonWinSweepStepMS = postStepMS
 )
 
 // ---------------------------------------------------------------------------

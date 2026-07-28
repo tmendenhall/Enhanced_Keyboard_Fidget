@@ -16,6 +16,7 @@
 //	  |-- SW1 --> Whack-A-Mole
 //	  |-- SW2 --> Rave
 //	  |-- SW3 --> Binary Counter
+//	  |-- SW4 --> Simon
 //	         |
 //	         +-- all four held 5000ms --> IDLE
 //	             (Rave: clock starts only once all four LEDs are at full)
@@ -48,6 +49,9 @@ var (
 //     edge, then nothing; the next mole spawns and simply stays lit.
 //   - Binary Counter counts releases. Holding produces none, so the count
 //     freezes for the duration of the gesture.
+//   - Simon needs no exception either: holding all four isn't something
+//     normal play ever does, so if it happens the round simply runs out
+//     the gesture the same as any other mode would.
 //   - Rave is the real conflict, handled by the raveAtFull precondition.
 func handleReset(now uint32) bool {
 	if current == stateIdle || !allHeld() {
@@ -190,6 +194,8 @@ func main() {
 				updateRave(now)
 			case stateBinary:
 				updateBinary(now)
+			case stateSimon:
+				updateSimon(now)
 			}
 		}
 

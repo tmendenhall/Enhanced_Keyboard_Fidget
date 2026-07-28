@@ -39,12 +39,13 @@ Modes and the switch that triggers them.
 | 1 | Whack-A-Mole| A random Light L1-4 is On. When the corresponding switch is pressed down the light is Off then wait 50ms and repeat|
 | 2 | Rave Mode | For each SW the corresponding light cycles continuously 0 → 255 → 0 using PWM for as long as the switch is held. Release turns it off. |
 | 3 | Binary Counter | Start with all L-4 off. If any swicth SW 1-4 is on then off then count in binary from 0 through 15 where L4 is the LSB and L1 is the MSB, so the row reads left-to-right like a written number. Cycle back to 0 once you reach 15. |
+| 4 | Simon | A random pattern of lights plays back one at a time. Reproduce it in order on the matching switches. Correct repeats grow the pattern by one, up to 15. A wrong switch fails immediately. |
 
 ---
 
 ## 2. How you change modes
 
-Once POST is complete SW1 activates mode 1, SW2 is 2 and SW 3 is 3.
+Once POST is complete SW1 activates mode 1, SW2 is 2, SW3 is 3, and SW4 is 4 (Simon).
 
 Holding all 4 SW1-SW4 down for the full hold duration goes back to the starting state. When all 4 switches are off then the next swtich press indicates the mode.
 
@@ -128,21 +129,34 @@ Examples
 
 ---
 
-### Mode 4 — <name>
+### Mode 4 — Simon
 
-**Idle behavior:**
+**Idle behavior:** None — entering the mode immediately starts the first pattern (length 1).
 
-**On press:**
+**On press:** During playback, presses are ignored (the pattern is just being shown). During input, the switch matching the current step advances the pattern; a switch that doesn't match fails the round immediately.
 
-**On hold:**
+**On hold:** No hold behavior specific to Simon. Held switches light their LED during input as press feedback, purely visual — matching is edge-triggered, not level-triggered.
 
-**On release:**
+**On release:** No release-triggered behavior (unlike Binary Counter, Simon reads presses, not full clicks).
 
-**Multi-key behavior:**
+**Multi-key behavior:** If the correct switch and a wrong switch are pressed in the same instant, the correct one wins — the round only fails if the expected switch was *not* among the presses that instant.
 
 **Timing / speeds:**
 
+| Step | Duration |
+|---|---|
+| Playback: LED on | 400ms (estimate, `simonPlaybackOnMS`) |
+| Playback: gap between steps | 200ms (estimate, `simonPlaybackGapMS`) |
+| Pause after a correct full repeat, before growing | 100ms (`simonSuccessGapMS`) |
+| Fail blink, on/off | 50ms / 50ms, ×3 cycles (`simonFailBlinkMS`, `simonFailBlinkCount`) |
+| Win sweep, per LED | defaults to the POST/reset timing (`simonWinSweepStepMS`) |
+
 **Anything else:**
+
+- Pattern grows by exactly one random step per successful round (repeats allowed, same as Whack-A-Mole), up to `simonMaxLength` = 15.
+- Reaching 15 and repeating it correctly plays a win sweep — L1→L4→L1→L4→L1, two full round trips, opposite-direction pairs same as the boot/reset sweeps — then returns to IDLE.
+- A wrong switch during input plays the fail blink (all four together, 50ms on/off ×3), then restarts the game at length 1. It does not return to IDLE — the device stays in Simon.
+- Holding all four switches still triggers the 5000ms reset gesture at any point, same as every other mode. Simon needs no exception the way Rave does, since holding all four isn't something normal Simon play ever does.
 
 ---
 
@@ -172,7 +186,4 @@ When the hold completes, the LEDs sweep in reverse — L4, L3, L2, L1 — so it 
 
 ## 6. Out of scope for the prototype
 
-Things you want eventually but explicitly not in v1.
-Simon mode.
-
-Produce a random set of light patterns. Display the pattern in full and wait. The user needs to trigger the corresponding switch for each light in the same order as displayed. Once a complete pattern has been reproduced then wait 100ms and display a new pattern adding one additional light until you reach a maximum of 15 lights shown in order. If the user does not reproduce the complete pattern then blink all of the lights on and off. 50ms on and 50 ms off for 3 blink cycles and start the game over.
+Nothing currently. Simon mode was the one item here — it's now built as Mode 4, see §3.

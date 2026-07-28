@@ -13,6 +13,7 @@ const (
 	stateMole
 	stateRave
 	stateBinary
+	stateSimon
 )
 
 var (
@@ -65,6 +66,10 @@ func enterMode(s state, now uint32) {
 		}
 	case stateBinary:
 		counter = 0
+	case stateSimon:
+		simonLength = 1
+		simonPattern[0] = simonRandomStep()
+		simonBeginPlayback(now)
 	}
 
 	if debug {
@@ -91,8 +96,9 @@ func updateIdle(now uint32) {
 		enterMode(stateRave, now)
 	case edgeDown[2]:
 		enterMode(stateBinary, now)
+	case edgeDown[3]:
+		enterMode(stateSimon, now)
 	}
-	// SW4 has no mode. Silent no-op — its edge was already drained.
 }
 
 // ---------------------------------------------------------------------------
@@ -253,4 +259,177 @@ func updateBinary(now uint32) {
 			level[i] = 0
 		}
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Mode 4 — Simon
+// ---------------------------------------------------------------------------
+//
+// A pattern of random steps is shown one LED at a time, then the player
+// repeats it by pressing the matching switches in the same order. A fully
+// correct repeat grows the pattern by one step (after a short pause) and
+// plays it again from the start, up to simonMaxLength. A wrong press at any
+// point during input fails immediately: all four LEDs blink together, then
+// the game restarts at length 1. Repeating simonMaxLength correctly plays a
+// win sweep and returns to IDLE — see behavior.md §6.
+//
+// Entered from IDLE on SW4, exactly like SW1-SW3 enter the other three modes.
+// Holding all four still triggers the reset gesture at any point, same as
+// every other mode — Simon adds no exception to that, since (unlike Rave)
+// holding all four isn't something normal play ever does.
+
+type simonPhase uint8
+
+const (
+	simonPlayback simonPhase = iota
+	simonInput
+	simonSuccessPause
+	simonFail
+)
+
+var (
+	simonPattern [simonMaxLength]uint8
+	simonLength  uint8
+	simonIdx     uint8 // playback: which step is lit. input: correct presses so far.
+
+	simonState  simonPhase
+	simonStepAt uint32
+	simonLit    bool // playback/fail: true while the current step/blink is lit
+
+	simonBlinksLeft uint8 // fail: on/off cycles remaining
+)
+
+// simonRandomStep picks the next pattern step, 0..numKeys-1. Same top-bits
+// trick as Whack-A-Mole: the xorshift's final stage leaves the low byte with
+// one less round of mixing than the high byte.
+func simonRandomStep() uint8 {
+	return uint8(rngNext() >> 14)
+}
+
+// simonBeginPlayback lights step 0 of the current pattern and starts the
+// playback timer. Called on mode entry and again each time the pattern grows.
+func simonBeginPlayback(now uint32) {
+	simonState = simonPlayback
+	simonIdx = 0
+	simonLit = true
+	simonStepAt = now
+	allLEDsOff()
+	level[simonPattern[0]] = 255
+}
+
+func updateSimon(now uint32) {
+	switch simonState {
+
+	case simonPlayback:
+		dur := uint32(simonPlaybackGapMS)
+		if simonLit {
+			dur = simonPlaybackOnMS
+		}
+		if !elapsed(now, simonStepAt, dur) {
+			return
+		}
+		simonStepAt = now
+
+		if simonLit {
+			// Step's on-time just ended; go dark for the gap.
+			level[simonPattern[simonIdx]] = 0
+			simonLit = false
+			return
+		}
+
+		// Gap just ended. Advance, or hand off to input if that was the
+		// last step.
+		simonIdx++
+		if simonIdx == simonLength {
+			simonState = simonInput
+			simonIdx = 0
+			return
+		}
+		simonLit = true
+		level[simonPattern[simonIdx]] = 255
+
+	case simonInput:
+		// Reflect currently-held switches as lit LEDs — feedback for the
+		// player's own presses. Purely visual; only edgeDown below drives
+		// game logic.
+		for i := 0; i < numKeys; i++ {
+			level[i] = 0
+			if keys[i].state {
+				level[i] = 255
+			}
+		}
+
+		// The expected switch is checked first so that pressing it still
+		// counts as correct even if another switch was pressed in the same
+		// pass — the alternative (lowest index wins) would make simultaneous
+		// presses unfairly order-dependent.
+		if edgeDown[simonPattern[simonIdx]] {
+			simonIdx++
+			if simonIdx == simonLength {
+				if simonLength == simonMaxLength {
+					allLEDsOff()
+					simonWinSweep()
+					enterIdle()
+					return
+				}
+				simonState = simonSuccessPause
+				simonStepAt = now
+			}
+			return
+		}
+
+		for i := 0; i < numKeys; i++ {
+			if !edgeDown[i] {
+				continue
+			}
+			simonState = simonFail
+			simonBlinksLeft = simonFailBlinkCount
+			simonLit = true
+			simonStepAt = now
+			for j := 0; j < numKeys; j++ {
+				level[j] = 255
+			}
+			return
+		}
+
+	case simonSuccessPause:
+		if !elapsed(now, simonStepAt, simonSuccessGapMS) {
+			return
+		}
+		simonPattern[simonLength] = simonRandomStep()
+		simonLength++
+		simonBeginPlayback(now)
+
+	case simonFail:
+		if !elapsed(now, simonStepAt, simonFailBlinkMS) {
+			return
+		}
+		simonStepAt = now
+		simonLit = !simonLit
+		for i := 0; i < numKeys; i++ {
+			if simonLit {
+				level[i] = 255
+			} else {
+				level[i] = 0
+			}
+		}
+		if !simonLit {
+			simonBlinksLeft--
+			if simonBlinksLeft == 0 {
+				simonLength = 1
+				simonPattern[0] = simonRandomStep()
+				simonBeginPlayback(now)
+			}
+		}
+	}
+}
+
+// simonWinSweep plays two full round trips, L1->L4->L1 twice, the instant
+// simonMaxLength is repeated correctly. Blocking, same as POST and the reset
+// sweep — nothing else needs to run while it plays.
+func simonWinSweep() {
+	sweep(false, simonWinSweepStepMS)
+	sweep(true, simonWinSweepStepMS)
+	sweep(false, simonWinSweepStepMS)
+	sweep(true, simonWinSweepStepMS)
 }
